@@ -1,0 +1,1320 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#3b2a1a">
+<title>BlocRoute</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --shadow: #3f3f3f; --yellow: #ffff55; --xp: #80ff20; --panel: rgba(0, 0, 0, .62);
+    --slot: 54px;
+  }
+  html, body { margin: 0; height: 100%; background: #78a7ff; overflow: hidden;
+    font-family: 'VT323', monospace; color: #fff; text-shadow: 2px 2px 0 var(--shadow);
+    -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+  #map { position: absolute; inset: 0; }
+  #map canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+  body.night #map canvas { filter: brightness(.62) saturate(.85) hue-rotate(-8deg); }
+  .hidden { display: none !important; }
+  svg.px { shape-rendering: crispEdges; display: block; width: 100%; height: 100%; }
+
+  /* Panneaux */
+  .box {
+    position: absolute; left: 12px; right: 12px; max-width: 460px; box-sizing: border-box;
+    background: var(--panel); padding: 10px 12px; border: 3px solid #000;
+    box-shadow: inset 2px 2px 0 rgba(255,255,255,.22), inset -2px -2px 0 rgba(0,0,0,.5);
+  }
+  #top, #instr { top: calc(env(safe-area-inset-top) + 12px); }
+  #card { bottom: calc(env(safe-area-inset-bottom) + 12px); }
+
+  /* Recherche */
+  .search { position: relative; }
+  .search input {
+    width: 100%; box-sizing: border-box; font: inherit; font-size: 26px; color: #fff; text-shadow: 2px 2px 0 var(--shadow);
+    background: #000; border: 2px solid #a0a0a0; padding: 6px 40px 6px 10px; outline: none; border-radius: 0;
+    -webkit-appearance: none; appearance: none;
+  }
+  .search input::-webkit-search-cancel-button { display: none; }
+  .search input:focus { border-color: #fff; }
+  .search input::placeholder { color: #8b8b8b; text-shadow: none; }
+  #clearQ { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: none; border: 0;
+    color: #aaa; font: inherit; font-size: 28px; padding: 0 8px; cursor: pointer; text-shadow: none; }
+  #results { list-style: none; margin: 8px 0 0; padding: 0; max-height: 52vh; overflow-y: auto; }
+  #results:empty { display: none; }
+  #results li { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-top: 2px solid rgba(255,255,255,.12);
+    cursor: pointer; font-size: 23px; line-height: 1.1; }
+  #results li:active { background: rgba(255,255,255,.15); color: var(--yellow); }
+  #results li .ic { width: 22px; height: 22px; flex: none; }
+  #results .sub { color: #aaaaaa; font-size: 19px; }
+  #results .head { color: var(--yellow); font-size: 19px; cursor: default; border-top: none; padding-bottom: 0; }
+
+  /* Instruction */
+  #instr { display: flex; align-items: center; gap: 12px; }
+  #iArrow { width: 58px; height: 58px; flex: none; }
+  #iArrow svg { filter: drop-shadow(2px 2px 0 #3f3f3f); }
+  #iMain { flex: 1; min-width: 0; }
+  #iDist { font-size: 40px; color: var(--yellow); line-height: 1; }
+  #iTxt { font-size: 23px; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  #iThen { flex: none; display: flex; flex-direction: column; align-items: center; font-size: 17px; color: #ccc;
+    border-left: 2px solid rgba(255,255,255,.18); padding-left: 10px; }
+  #iThen .a { width: 28px; height: 28px; }
+
+  /* Carte d'aperçu */
+  #cInfo { font-size: 25px; line-height: 1.15; }
+  #cInfo .sub { color: #aaaaaa; font-size: 20px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .row .btn { flex: 1 1 auto; }
+
+  /* Boutons en pierre */
+  .btn {
+    display: inline-block; font-family: inherit; font-size: 23px; color: #e0e0e0; text-decoration: none; text-align: center;
+    text-shadow: 2px 2px 0 var(--shadow); cursor: pointer; padding: 6px 12px; border-radius: 0;
+    background: #6f6f6f var(--stone-url, none); background-size: 64px 64px; image-rendering: pixelated;
+    border: 2px solid #000; box-shadow: inset 2px 2px 0 rgba(255,255,255,.35), inset -2px -3px 0 rgba(0,0,0,.45);
+  }
+  .btn:active { color: var(--yellow); box-shadow: inset 2px 2px 0 rgba(0,0,0,.45), inset -2px -2px 0 rgba(255,255,255,.25); }
+  .btn.green { background-color: #3c8527; background-blend-mode: multiply; color: #fff; }
+  .btn.red { background-color: #9a2c2c; background-blend-mode: multiply; color: #fff; }
+  .btn.blue { background-color: #2c6aa0; background-blend-mode: multiply; color: #fff; }
+  .btn.on { color: var(--yellow); }
+
+  /* HUD du bas : nom de rue, infos, niveau d'XP, barre d'XP, barre d'inventaire */
+  #hud { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 10px);
+    display: flex; flex-direction: column; align-items: center; pointer-events: none; width: max-content; max-width: calc(100vw - 16px); }
+  #hud > * { pointer-events: auto; }
+  #street { font-size: 24px; max-width: 92vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 24px; text-align: center; }
+  #trip { font-size: 19px; color: #ddd; min-height: 19px; }
+  #xpLevel { font-size: 30px; line-height: .9; color: var(--xp); margin-top: 2px;
+    text-shadow: 2px 0 0 #000, -2px 0 0 #000, 0 2px 0 #000, 0 -2px 0 #000; }
+  #xpLevel small { font-size: 18px; }
+  #xp { width: 100%; height: 8px; background: #1a1a1a; border: 2px solid #000; box-sizing: border-box; margin: 3px 0 4px;
+    background-image: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), #000 calc(10% - 2px) 10%); position: relative; }
+  #xpFill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--xp); transition: width .9s linear; }
+  #hotbar { display: flex; background: rgba(0,0,0,.55); border: 3px solid #000; padding: 2px; gap: 2px; }
+  .slot { width: var(--slot); height: var(--slot); position: relative; box-sizing: border-box; cursor: pointer;
+    background: rgba(139,139,139,.55); border: 0; padding: 0; font: inherit; color: #fff; text-decoration: none;
+    box-shadow: inset 2px 2px 0 rgba(0,0,0,.45), inset -2px -2px 0 rgba(255,255,255,.3); display: block; }
+  .slot .ic { position: absolute; left: 50%; top: 5px; transform: translateX(-50%); width: 28px; height: 28px; }
+  .slot .lb { position: absolute; left: 0; right: 0; bottom: 1px; font-size: 14px; line-height: 1; text-align: center;
+    white-space: nowrap; overflow: hidden; text-shadow: 1px 1px 0 #000; }
+  .slot:active, .slot.sel { outline: 3px solid #fff; outline-offset: -1px; z-index: 1; }
+  .slot:active .lb { color: var(--yellow); }
+  body.nav-mode #xpLevel, body.nav-mode #xp { display: block; }
+  #xpLevel, #xp { display: none; }
+
+  /* Messages façon chat */
+  #chat { position: absolute; left: 8px; bottom: calc(env(safe-area-inset-bottom) + 150px); max-width: min(78vw, 420px);
+    display: flex; flex-direction: column; gap: 2px; pointer-events: none; }
+  #chat div { background: rgba(0,0,0,.5); padding: 2px 8px; font-size: 20px; transition: opacity .6s; }
+  #chat div b { color: var(--yellow); font-weight: normal; }
+  #chat div.fade { opacity: 0; }
+  body.preview-mode #chat { bottom: calc(env(safe-area-inset-bottom) + 210px); }
+
+  .pix svg { filter: drop-shadow(0 3px 0 rgba(0,0,0,.4)); }
+  .player { width: 44px; height: 48px; }
+  .flag { width: 32px; height: 40px; }
+  .maplibregl-ctrl-attrib { font-family: system-ui, sans-serif; font-size: 10px; text-shadow: none; color: #000; }
+  .maplibregl-ctrl-bottom-right { bottom: auto; top: calc(env(safe-area-inset-top) + 4px); }
+  body.nav-mode .maplibregl-ctrl-bottom-right, body.preview-mode .maplibregl-ctrl-bottom-right { display: none; }
+
+  /* Écran de chargement */
+  #loader {
+    position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #3b2a1a var(--dirt-url, none); background-size: 96px 96px; image-rendering: pixelated; transition: opacity .4s;
+  }
+  #loader::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+  #loader > * { position: relative; }
+  #logo { font-size: 72px; line-height: 1; color: #d8d8d8; text-shadow: 4px 4px 0 #2a2a2a, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000; letter-spacing: 2px; }
+  #splash { color: var(--yellow); font-size: 26px; margin: -6px 0 0 180px; white-space: nowrap; text-shadow: 2px 2px 0 #3f3f00;
+    animation: pulse .5s ease-in-out infinite alternate; }
+  @keyframes pulse { from { transform: rotate(-12deg) scale(1); } to { transform: rotate(-12deg) scale(1.08); } }
+  #loadTxt { margin-top: 48px; font-size: 26px; }
+  #bar { width: 240px; height: 10px; margin-top: 10px; background: #808080; border: 2px solid #000; }
+  #barFill { height: 100%; width: 0; background: #55ff55; transition: width .3s; }
+  #loader.gone { opacity: 0; pointer-events: none; }
+
+  @media (max-width: 360px) { :root { --slot: 48px; } }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="top" class="box">
+  <div class="search">
+    <input id="q" type="search" placeholder="Où va-t-on ?" autocomplete="off" enterkeyhint="search">
+    <button id="clearQ" class="hidden" aria-label="Effacer">×</button>
+  </div>
+  <ul id="results"></ul>
+</div>
+
+<div id="instr" class="box hidden">
+  <div id="iArrow"></div>
+  <div id="iMain">
+    <div id="iDist"></div>
+    <div id="iTxt"></div>
+  </div>
+  <div id="iThen" class="hidden"><div class="a"></div><div>puis</div></div>
+</div>
+
+<div id="card" class="box hidden">
+  <div id="cInfo"></div>
+  <div class="row" id="cBtns"></div>
+</div>
+
+<div id="chat"></div>
+
+<div id="hud">
+  <div id="street"></div>
+  <div id="trip"></div>
+  <div id="xpLevel"></div>
+  <div id="xp"><div id="xpFill"></div></div>
+  <div id="hotbar"></div>
+</div>
+
+<div id="loader">
+  <div id="logo">BlocRoute</div>
+  <div id="splash"></div>
+  <div id="loadTxt">Génération du monde…</div>
+  <div id="bar"><div id="barFill"></div></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+
+/* =====================================================================
+   1. TEXTURES PIXEL MAISON (16x16, agrandies x4)
+   ===================================================================== */
+function rng(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+
+function texCanvas(seed, pixelFn) {
+  const N = 16, S = 4;
+  const c = document.createElement('canvas');
+  c.width = c.height = N * S;
+  const ctx = c.getContext('2d');
+  const r = rng(seed);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    ctx.fillStyle = pixelFn(x, y, r);
+    ctx.fillRect(x * S, y * S, S, S);
+  }
+  return c;
+}
+const asData = c => c.getContext('2d').getImageData(0, 0, c.width, c.height);
+
+const GRASS = ['#5d9c34', '#66a83a', '#6fb240', '#579330', '#7cbd47'];
+const STONE = ['#7f7f7f', '#8a8a8a', '#747474', '#969696', '#6b6b6b'];
+
+function cobble(seed) {
+  const r0 = rng(seed + 100), offs = Array.from({ length: 16 }, () => Math.floor(r0() * 3));
+  return (x, y, r) => {
+    const row = Math.floor(y / 4), col = Math.floor(x / 4);
+    if ((x + offs[row]) % 4 === 0 || (y + offs[col + 4]) % 4 === 0) return pick(r, ['#4f4f4f', '#565656', '#4a4a4a']);
+    return pick(r, ['#8c8c8c', '#9a9a9a', '#7e7e7e', '#a5a5a5']);
+  };
+}
+function bricks(colors, mortar, w) {
+  return (x, y, r) => {
+    const row = Math.floor(y / 4);
+    if (y % 4 === 3) return mortar;
+    if ((x + (row % 2 ? w / 2 : 0)) % w === 0) return mortar;
+    return pick(r, colors);
+  };
+}
+
+const CANVAS = {
+  grass:   texCanvas(1, (x, y, r) => pick(r, GRASS)),
+  flowers: texCanvas(11, (x, y, r) => {
+    const f = { '3,4': '#e33', '11,2': '#ff5', '7,10': '#e33', '13,12': '#5bf', '2,13': '#ff5' }[x + ',' + y];
+    return f || pick(r, GRASS);
+  }),
+  leaves:  texCanvas(2, (x, y, r) => r() < .1 ? '#173d0f' : pick(r, ['#2f6b1e', '#3a7d25', '#285c19', '#43892b'])),
+  planks:  texCanvas(3, (x, y, r) => {
+    const row = y % 4, band = Math.floor(y / 4);
+    if (row === 3) return '#7a5a32';
+    if (x === (band % 2 ? 4 : 12)) return '#8d6a3c';
+    return pick(r, ['#c8a165', '#bd9659', '#b38c52', '#c29b5f']);
+  }),
+  bricks:  texCanvas(12, bricks(['#9b4a35', '#a8553f', '#8e4230', '#b05e46'], '#b8aea4', 8)),
+  stonebr: texCanvas(13, bricks(['#7d7d7d', '#878787', '#727272', '#8f8f8f'], '#4e4e4e', 16)),
+  cobble:  texCanvas(14, cobble(14)),
+  stone:   texCanvas(4, (x, y, r) => pick(r, STONE)),
+  gravel:  texCanvas(5, (x, y, r) => pick(r, ['#a89f8f', '#b5ac9b', '#968e80', '#c0b8a8', '#8a8273'])),
+  path:    texCanvas(15, (x, y, r) => pick(r, ['#8b6a3e', '#96744a', '#7d5e36', '#a07d50', '#8f7044'])),
+  farm:    texCanvas(16, (x, y, r) => (y % 4 < 2) ? pick(r, ['#4a3420', '#523a24', '#43301d']) : pick(r, ['#6e5032', '#77583a', '#664a2e'])),
+  sand:    texCanvas(7, (x, y, r) => pick(r, ['#dbcf8e', '#e3d79c', '#d2c584', '#e8dda8'])),
+  snow:    texCanvas(17, (x, y, r) => pick(r, ['#f4f8ff', '#e8eef8', '#ffffff', '#dfe7f2'])),
+  dirt:    texCanvas(18, (x, y, r) => pick(r, ['#79553a', '#866043', '#6c4b33', '#5e412c', '#916a4b'])),
+};
+const TEX = {};
+for (const [k, c] of Object.entries(CANVAS)) if (k !== 'dirt') TEX[k] = asData(c);
+
+const WATER_FRAMES = Array.from({ length: 8 }, (_, f) => asData(texCanvas(6, (x, y, r) => {
+  const v = r();
+  const wave = (x + y * 2 + f * 2) % 8;
+  if (wave === 0 && v > .35) return '#6f8ff0';
+  if (wave === 1 && v > .6) return '#5a7ce8';
+  return ['#3f63d8', '#4169e1', '#3858cc', '#466fe6'][Math.floor(v * 4)];
+})));
+TEX.water = WATER_FRAMES[0];
+
+document.documentElement.style.setProperty('--dirt-url', `url(${CANVAS.dirt.toDataURL()})`);
+document.documentElement.style.setProperty('--stone-url', `url(${CANVAS.stone.toDataURL()})`);
+
+/* =====================================================================
+   2. STYLE DE CARTE
+   ===================================================================== */
+const ROAD_BIG = ['motorway', 'trunk'];
+const ROAD_MID = ['primary', 'secondary', 'tertiary'];
+const ROAD_SMALL = ['minor', 'service'];
+const ROAD_ALL = [...ROAD_BIG, ...ROAD_MID, ...ROAD_SMALL];
+const PATHS = ['path', 'track'];
+const NAME = ['coalesce', ['get', 'name:fr'], ['get', 'name']];
+const HEIGHT = ['coalesce', ['get', 'render_height'], 8];
+
+function roadWidth(add) {
+  const w = (big, mid, small) => ['+', ['match', ['get', 'class'], ROAD_BIG, big, ROAD_MID, mid, small], add];
+  return ['interpolate', ['exponential', 1.5], ['zoom'], 12, w(3, 2, .5), 16, w(16, 12, 6), 19, w(56, 44, 24)];
+}
+const roadLayer = (id, classes, pattern) => ({
+  id, type: 'line', source: 'omt', 'source-layer': 'transportation',
+  filter: ['match', ['get', 'class'], classes, true, false],
+  layout: { 'line-join': 'miter' },
+  paint: { 'line-pattern': pattern, 'line-width': roadWidth(0) }
+});
+const buildingLayer = (id, filter, pattern) => ({
+  id, type: 'fill-extrusion', source: 'omt', 'source-layer': 'building', minzoom: 14.5, filter,
+  paint: {
+    'fill-extrusion-pattern': pattern,
+    'fill-extrusion-height': ['*', 4, ['ceil', ['/', HEIGHT, 4]]],
+    'fill-extrusion-base': ['*', 4, ['floor', ['/', ['coalesce', ['get', 'render_min_height'], 0], 4]]],
+    'fill-extrusion-opacity': 1
+  }
+});
+const fillLayer = (id, layer, classes, pattern) => ({
+  id, type: 'fill', source: 'omt', 'source-layer': layer,
+  filter: ['match', ['get', 'class'], classes, true, false],
+  paint: { 'fill-pattern': pattern }
+});
+
+const SKY_DAY = { 'sky-color': '#78a7ff', 'horizon-color': '#c2d8ff', 'fog-color': '#c2d8ff',
+  'sky-horizon-blend': 0.7, 'horizon-fog-blend': 0.6, 'fog-ground-blend': 0.85, 'atmosphere-blend': 0 };
+const SKY_NIGHT = { 'sky-color': '#0b0f2a', 'horizon-color': '#1c2350', 'fog-color': '#141a3c',
+  'sky-horizon-blend': 0.7, 'horizon-fog-blend': 0.6, 'fog-ground-blend': 0.85, 'atmosphere-blend': 0 };
+
+const style = {
+  version: 8,
+  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+  sky: SKY_DAY,
+  sources: {
+    omt: {
+      type: 'vector',
+      url: 'https://tiles.openfreemap.org/planet',
+      attribution: '<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://project-osrm.org">OSRM</a> · <a href="https://photon.komoot.io">Photon</a>'
+    },
+    trajet: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+    balise: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } }
+  },
+  layers: [
+    { id: 'herbe', type: 'background', paint: { 'background-pattern': 'grass' } },
+    fillLayer('champs', 'landcover', ['farmland'], 'farm'),
+    fillLayer('prairies', 'landcover', ['grass'], 'flowers'),
+    { id: 'parcs', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-pattern': 'flowers' } },
+    fillLayer('zones-grises', 'landuse', ['industrial', 'commercial', 'railway', 'retail'], 'gravel'),
+    fillLayer('foret', 'landcover', ['wood', 'forest'], 'leaves'),
+    fillLayer('rochers', 'landcover', ['rock'], 'stone'),
+    fillLayer('neige', 'landcover', ['ice', 'glacier'], 'snow'),
+    fillLayer('sable', 'landcover', ['sand'], 'sand'),
+    { id: 'eau', type: 'fill', source: 'omt', 'source-layer': 'water', paint: { 'fill-pattern': 'water' } },
+    { id: 'rivieres', type: 'line', source: 'omt', 'source-layer': 'waterway', minzoom: 12,
+      paint: { 'line-pattern': 'water', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 18, 12] } },
+    { id: 'chemins', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 15,
+      filter: ['match', ['get', 'class'], PATHS, true, false],
+      paint: { 'line-pattern': 'path', 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], 15, 3, 19, 14] } },
+    { id: 'routes-bord', type: 'line', source: 'omt', 'source-layer': 'transportation',
+      filter: ['match', ['get', 'class'], ROAD_ALL, true, false],
+      layout: { 'line-join': 'miter' },
+      paint: { 'line-color': '#2e2e2e', 'line-width': roadWidth(3) } },
+    roadLayer('routes-petites', ROAD_SMALL, 'stone'),
+    roadLayer('routes-moyennes', ROAD_MID, 'cobble'),
+    roadLayer('routes-grandes', ROAD_BIG, 'stonebr'),
+    { id: 'rails', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 13,
+      filter: ['==', ['get', 'class'], 'rail'],
+      paint: { 'line-color': '#5a4a3a', 'line-width': 3, 'line-dasharray': [1, 1] } },
+    { id: 'trajet-bord', type: 'line', source: 'trajet', layout: { 'line-join': 'miter' },
+      paint: { 'line-color': '#3a0606', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 6, 18, 18] } },
+    { id: 'trajet', type: 'line', source: 'trajet', layout: { 'line-join': 'miter' },
+      paint: { 'line-color': '#e3342f', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3, 18, 11] } },
+    buildingLayer('bat-bois', ['<=', HEIGHT, 9], 'planks'),
+    buildingLayer('bat-briques', ['all', ['>', HEIGHT, 9], ['<=', HEIGHT, 21]], 'bricks'),
+    buildingLayer('bat-pierre', ['>', HEIGHT, 21], 'stonebr'),
+    { id: 'balise', type: 'fill-extrusion', source: 'balise',
+      paint: { 'fill-extrusion-color': '#c8f6ff', 'fill-extrusion-height': 260, 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 0.55 } },
+    { id: 'noms-rues', type: 'symbol', source: 'omt', 'source-layer': 'transportation_name', minzoom: 15,
+      layout: { 'symbol-placement': 'line', 'text-field': NAME, 'text-font': ['Noto Sans Bold'], 'text-size': 14,
+                'symbol-spacing': 350 },
+      paint: { 'text-color': '#ffffff', 'text-halo-color': '#2a2a2a', 'text-halo-width': 2 } },
+    { id: 'lieux', type: 'symbol', source: 'omt', 'source-layer': 'place', maxzoom: 16,
+      layout: { 'text-field': NAME, 'text-font': ['Noto Sans Bold'],
+                'text-size': ['interpolate', ['linear'], ['zoom'], 10, 13, 16, 19] },
+      paint: { 'text-color': '#ffff55', 'text-halo-color': '#3f3f00', 'text-halo-width': 2 } }
+  ]
+};
+
+/* =====================================================================
+   3. CARTE
+   ===================================================================== */
+const PARIS = [2.3522, 48.8566];
+const map = new maplibregl.Map({
+  container: 'map', style, center: PARIS, zoom: 15, pitch: 58, bearing: 0, maxPitch: 70,
+  pixelRatio: 1,          // basse définition volontaire = gros pixels + moins de calcul
+  fadeDuration: 0,        // pas de fondu des étiquettes : plus net, moins de rendus
+  attributionControl: { compact: true }
+});
+map.on('style.load', () => {
+  for (const [id, img] of Object.entries(TEX)) if (!map.hasImage(id)) map.addImage(id, img);
+  applyDayNight();
+});
+map.on('styleimagemissing', e => {
+  if (TEX[e.id] && !map.hasImage(e.id)) map.addImage(e.id, TEX[e.id]);
+});
+
+// Eau animée, seulement si on la voit (économise la batterie)
+let waterFrame = 0;
+setInterval(() => {
+  if (document.visibilityState !== 'visible' || !map.hasImage('water') || map.getZoom() < 12) return;
+  waterFrame = (waterFrame + 1) % WATER_FRAMES.length;
+  map.updateImage('water', WATER_FRAMES[waterFrame]);
+}, 700);
+
+/* --- Jour / nuit : auto, jour ou nuit --- */
+const STORE = {
+  get(k, def) { try { const v = localStorage.getItem('blocroute.' + k); return v ? JSON.parse(v) : def; } catch (e) { return def; } },
+  set(k, v) { try { localStorage.setItem('blocroute.' + k, JSON.stringify(v)); } catch (e) {} }
+};
+let skyMode = STORE.get('ciel', 'auto');   // auto | jour | nuit
+function isNight() {
+  if (skyMode === 'jour') return false;
+  if (skyMode === 'nuit') return true;
+  const h = new Date().getHours();
+  return h >= 20 || h < 7;
+}
+function applyDayNight() {
+  const night = isNight();
+  document.body.classList.toggle('night', night);
+  if (map.setSky) { try { map.setSky(night ? SKY_NIGHT : SKY_DAY); } catch (e) {} }
+}
+setInterval(applyDayNight, 5 * 60 * 1000);
+
+/* --- Écran de chargement --- */
+const SPLASHES = ['100 % pixels !', 'Pas de bouchons ici !', 'Aussi en 3D !', 'Fait maison !', 'Roule ma poule !',
+  'Bloc après bloc !', 'Sans abonnement !', 'Hmm !', 'Le villageois connaît la route !'];
+$('splash').textContent = SPLASHES[Math.floor(Math.random() * SPLASHES.length)];
+let loadPct = 0;
+const loadTimer = setInterval(() => {
+  loadPct = Math.min(90, loadPct + 8 + Math.random() * 10);
+  $('barFill').style.width = loadPct + '%';
+}, 200);
+let loaderHidden = false;
+function hideLoader() {
+  if (loaderHidden) return;
+  loaderHidden = true;
+  clearInterval(loadTimer);
+  $('barFill').style.width = '100%';
+  setTimeout(() => $('loader').classList.add('gone'), 250);
+  setTimeout(() => $('loader').classList.add('hidden'), 700);
+}
+map.once('load', () => setTimeout(hideLoader, 700));
+map.once('idle', hideLoader);
+setTimeout(hideLoader, 5000);
+
+/* =====================================================================
+   4. PIXEL ART : marqueurs, flèches, icônes
+   ===================================================================== */
+function pixelSvg(rows, colors) {
+  let rects = '';
+  rows.forEach((line, y) => [...line].forEach((ch, x) => {
+    if (colors[ch]) rects += `<rect x="${x}" y="${y}" width="1.05" height="1.05" fill="${colors[ch]}"/>`;
+  }));
+  return `<svg class="px" viewBox="0 0 ${rows[0].length} ${rows.length}" xmlns="http://www.w3.org/2000/svg">${rects}</svg>`;
+}
+function pixelMarker(rows, colors, cls) {
+  const el = document.createElement('div');
+  el.className = 'pix ' + cls;
+  el.innerHTML = pixelSvg(rows, colors);
+  return el;
+}
+const playerEl = pixelMarker([
+  '....X....',
+  '...XWX...',
+  '...XWX...',
+  '..XWWWX..',
+  '..XWWWX..',
+  '.XWWWWWX.',
+  '.XWWWWWX.',
+  'XWWWGWWWX',
+  'XWWXXXWWX',
+  'XXX...XXX'
+], { X: '#111', W: '#f4f4f4', G: '#cfcfcf' }, 'player');
+const FLAG_ROWS = [
+  'XX......',
+  'XRRRRR..',
+  'XRRRRRR.',
+  'XRRRRR..',
+  'XX......',
+  'X.......',
+  'X.......',
+  'X.......',
+  'X.......',
+  'XX......'
+];
+const flagEl = pixelMarker(FLAG_ROWS, { X: '#3b2a1a', R: '#e3342f' }, 'flag');
+
+const player = new maplibregl.Marker({ element: playerEl, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(PARIS);
+const flag = new maplibregl.Marker({ element: flagEl, anchor: 'bottom-left' }).setLngLat(PARIS);
+let playerShown = false;
+
+const ARROW_UP = ['....X....', '...XXX...', '..XXXXX..', '.XXXXXXX.', 'XXXXXXXXX', '...XXX...', '...XXX...', '...XXX...', '...XXX...'];
+const ARROW_TURN = ['......X..', '......XX.', 'XXXXXXXXX', 'XXXXXXXXX', 'XXX...XX.', 'XXX...X..', 'XXX......', 'XXX......', 'XXX......'];
+const ARROW_UTURN = ['.XXXXX...', 'XXXXXXX..', 'XX...XX..', 'XX...XX..', 'XX.XXXXXX', 'XX..XXXX.', 'XX...XX..', 'XX.......', 'XX.......'];
+const ARROW_ROUND = ['..XXXXX..', '.XX...XX.', 'XX.....XX', 'XX.....XX', 'XX.....XX', '.XX...XX.', '..XX.XX..', '...XXX...', '...XXX...'];
+const mirror = rows => rows.map(r => [...r].reverse().join(''));
+function arrowSvg(kind) {
+  const c = { X: '#ffffff', Y: '#ffff55', R: '#e3342f' };
+  const rot = deg => `<div style="transform:rotate(${deg}deg);width:100%;height:100%">${pixelSvg(ARROW_UP, c)}</div>`;
+  switch (kind) {
+    case 'right': return pixelSvg(ARROW_TURN, c);
+    case 'left': return pixelSvg(mirror(ARROW_TURN), c);
+    case 'slight right': return rot(45);
+    case 'slight left': return rot(-45);
+    case 'sharp right': return rot(135);
+    case 'sharp left': return rot(-135);
+    case 'uturn': return pixelSvg(ARROW_UTURN, c);
+    case 'round': return pixelSvg(ARROW_ROUND, c);
+    case 'arrive': return pixelSvg(FLAG_ROWS.map(r => r.replace(/R/g, 'Y')), c);
+    default: return pixelSvg(ARROW_UP, c);
+  }
+}
+
+// Icônes 10x10 de la barre d'inventaire
+const PAL = { X: '#ffffff', D: '#3a3a3a', R: '#e3342f', Y: '#ffd83d', B: '#4aa3ff', P: '#e8d7a8', N: '#7a5a32', G: '#55ff55', K: '#111111' };
+const ICONS = {
+  son: ['..........', '....X.....', '...XX..X..', 'XXXXX...X.', 'XXXXX.X.X.', 'XXXXX.X.X.', 'XXXXX...X.', '...XX..X..', '....X.....', '..........'],
+  muet: ['..........', '....X.....', '...XX.....', 'XXXXX.R..R', 'XXXXX..RR.', 'XXXXX..RR.', 'XXXXX.R..R', '...XX.....', '....X.....', '..........'],
+  villageois: ['.NNNNNNNN.', 'NPPPPPPPPN', 'NPPPPPPPPN', 'NPKPPKPPKN', 'NPPPPPPPPN', 'NPPPPPPPPN', '.NNNNNNNN.', '..NN......', '.NN.......', '..........'],
+  centrer: ['....R.....', '....R.....', '..XXXXX...', '..X...X...', 'RRX.R.XRR.', '..X...X...', '..XXXXX...', '....R.....', '....R.....', '..........'],
+  carte: ['NNNNNNNNN.', 'NPPPPPPPN.', 'NPRPPPPPN.', 'NPRRPPPPN.', 'NPPRRRPPN.', 'NPPPPRPPN.', 'NPPPPRRPN.', 'NPPPPPRPN.', 'NNNNNNNNN.', '..........'],
+  waze: ['.....BBBBB', '.......BBB', '......B.BB', 'XXXX.B...B', 'X...B.....', 'X..B......', 'X.........', 'X.......X.', 'X.......X.', 'XXXXXXXXX.'],
+  stop: ['RR......RR', 'RRR....RRR', '.RRR..RRR.', '..RRRRRR..', '...RRRR...', '...RRRR...', '..RRRRRR..', '.RRR..RRR.', 'RRR....RRR', 'RR......RR'],
+  soleil: ['....Y.....', '.Y..Y..Y..', '..YYYYY...', '.YYYYYYY..', 'YYYYYYYYY.', '.YYYYYYY..', '..YYYYY...', '.Y..Y..Y..', '....Y.....', '..........'],
+  lune: ['...XXXX...', '..XXX.....', '.XXX......', '.XXX......', '.XXX......', '.XXXX.....', '..XXXXXX..', '...XXXX...', '..........', '..........'],
+  etoile: ['....Y.....', '....Y.....', '...YYY....', 'YYYYYYYYY.', '.YYYYYYY..', '..YYYYY...', '..YY.YY...', '.YY...YY..', '.Y.....Y..', '..........'],
+  etoileVide: ['....D.....', '....D.....', '...D.D....', 'DDDD.DDDD.', '.D.....D..', '..D...D...', '..D.D.D...', '.D.D..DD..', '.DD....D..', '..........'],
+  drapeau: FLAG_ROWS.map(r => r.padEnd(10, '.')),
+  maison: ['....N.....', '...NNN....', '..NNNNN...', '.NNNNNNN..', 'NNNNNNNNN.', '.PPPPPPP..', '.PPNNPPP..', '.PPNNPBP..', '.PPNNPPP..', '..........'],
+  horloge: ['..XXXXX...', '.X.....X..', 'X...X...X.', 'X...X...X.', 'X...XXX.X.', 'X.......X.', '.X.....X..', '..XXXXX...', '..........', '..........'],
+  loupe: ['..XXX.....', '.X...X....', 'X.....X...', 'X.....X...', 'X.....X...', '.X...X....', '..XXXXX...', '......XX..', '.......XX.', '........X.']
+};
+const icon = name => pixelSvg(ICONS[name], PAL);
+
+/* =====================================================================
+   5. OUTILS
+   ===================================================================== */
+const toRad = d => d * Math.PI / 180;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function distance(a, b) {
+  const R = 6371000;
+  const dLat = toRad(b[1] - a[1]), dLon = toRad(b[0] - a[0]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function bearingBetween(a, b) {
+  const y = Math.sin(toRad(b[0] - a[0])) * Math.cos(toRad(b[1]));
+  const x = Math.cos(toRad(a[1])) * Math.sin(toRad(b[1])) -
+            Math.sin(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.cos(toRad(b[0] - a[0]));
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+const angleDiff = (a, b) => ((b - a + 540) % 360) - 180;
+
+function fmtDist(m) {
+  if (m < 1000) return (m < 300 ? Math.round(m / 10) * 10 : Math.round(m / 50) * 50) + ' m';
+  return (m / 1000).toFixed(m < 10000 ? 1 : 0).replace('.', ',') + ' km';
+}
+function fmtDistVoice(m) {
+  if (m < 1000) return Math.max(50, Math.round(m / 50) * 50) + ' mètres';
+  const km = (m / 1000).toFixed(1).replace('.0', '').replace('.', ',');
+  return km + (km === '1' ? ' kilomètre' : ' kilomètres');
+}
+function fmtDur(s) {
+  const min = Math.max(1, Math.round(s / 60));
+  if (min < 60) return min + ' min';
+  return Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0');
+}
+const clock = d => d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+/* Messages façon chat (remplacent les bulles d'info) */
+function toast(msg, ms = 5000) {
+  const line = document.createElement('div');
+  line.innerHTML = '<b>&lt;BlocRoute&gt;</b> ';
+  line.appendChild(document.createTextNode(msg));
+  const chat = $('chat');
+  chat.appendChild(line);
+  while (chat.children.length > 4) chat.firstChild.remove();
+  setTimeout(() => line.classList.add('fade'), ms);
+  setTimeout(() => line.remove(), ms + 700);
+}
+
+/* =====================================================================
+   6. SONS ET VOIX (tout est généré, aucun son récupéré d'un jeu)
+   ===================================================================== */
+let audio = null;
+function audioCtx() {
+  if (!audio) { try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (audio.state === 'suspended') audio.resume();
+  return audio;
+}
+function notes(freqs, step = 0.11, vol = 0.22) {
+  if (voiceMode === 'muet') return;
+  const ac = audioCtx(); if (!ac) return;
+  const t0 = ac.currentTime + 0.02;
+  freqs.forEach((f, i) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'triangle'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t0 + i * step);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + i * step + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + i * step + step * 1.6);
+    o.connect(g).connect(ac.destination);
+    o.start(t0 + i * step); o.stop(t0 + i * step + step * 1.8);
+  });
+}
+const SFX = {
+  ding: () => notes([740, 988]),
+  arrive: () => notes([523, 659, 784, 1047], 0.13),
+  click: () => notes([1300], 0.035, 0.12)
+};
+
+/* Grognement de villageois synthétisé :
+   une onde en dents de scie (cordes vocales) filtrée par des résonances "nasales" (m, n),
+   avec un contour de hauteur qui monte ou descend comme une intonation. */
+const GRUNTS = [
+  { name: 'hmm',   c: [1.05, 0.98, 0.82] },   // affirmatif, descend
+  { name: 'hrm?',  c: [0.92, 0.95, 1.28] },   // interrogatif, monte
+  { name: 'hmmh',  c: [1.0, 1.15, 0.85] },    // monte puis descend
+  { name: 'hm-hm', c: [1.1, 0.9, 1.1, 0.88] } // deux petits coups
+];
+function grunt(ac, t, kind, base) {
+  const dur = 0.26 + Math.random() * 0.14;
+  const o = ac.createOscillator(); o.type = 'sawtooth';
+  const pts = kind.c;
+  o.frequency.setValueAtTime(base * pts[0], t);
+  pts.forEach((p, i) => { if (i) o.frequency.linearRampToValueAtTime(base * p, t + dur * i / (pts.length - 1)); });
+
+  const lfo = ac.createOscillator(), lfoG = ac.createGain();
+  lfo.frequency.value = 7; lfoG.gain.value = base * 0.025;
+  lfo.connect(lfoG).connect(o.frequency);
+
+  // Résonances du nez (murmure "mmm")
+  const f1 = ac.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 280; f1.Q.value = 3.5;
+  const f2 = ac.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 1050; f2.Q.value = 7;
+  const g2 = ac.createGain(); g2.gain.value = 0.35;
+  const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1600;
+  const env = ac.createGain();
+
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.exponentialRampToValueAtTime(0.9, t + 0.04);
+  if (kind.name === 'hm-hm') {
+    env.gain.exponentialRampToValueAtTime(0.08, t + dur * 0.45);
+    env.gain.exponentialRampToValueAtTime(0.9, t + dur * 0.55);
+  } else {
+    env.gain.setValueAtTime(0.9, t + dur * 0.7);
+  }
+  env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+  o.connect(f1); o.connect(f2); f2.connect(g2);
+  f1.connect(lp); g2.connect(lp); lp.connect(env).connect(ac.destination);
+  o.start(t); o.stop(t + dur + 0.05); lfo.start(t); lfo.stop(t + dur + 0.05);
+  return dur;
+}
+// Joue 1 à 3 grognements, renvoie leur durée totale (en secondes)
+function villagerMumble(count, question = false) {
+  const ac = audioCtx(); if (!ac) return 0;
+  let t = ac.currentTime + 0.03;
+  const start = t;
+  const base = 120 + Math.random() * 25;
+  for (let i = 0; i < count; i++) {
+    const kind = (question && i === count - 1) ? GRUNTS[1] : GRUNTS[Math.floor(Math.random() * GRUNTS.length)];
+    t += grunt(ac, t, kind, base * (0.95 + Math.random() * 0.1)) + 0.07;
+  }
+  return t - start;
+}
+
+const VOICES = [
+  { id: 'villageois', label: 'Villag.', icon: 'villageois' },
+  { id: 'normale',    label: 'Voix',    icon: 'son' },
+  { id: 'muet',       label: 'Muet',    icon: 'muet' }
+];
+let voiceMode = STORE.get('voix', 'villageois');
+if (voiceMode === 'grognon') voiceMode = 'villageois';
+
+function frenchVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  const all = speechSynthesis.getVoices();
+  return all.find(v => v.lang === 'fr-FR') || all.find(v => v.lang && v.lang.startsWith('fr')) || null;
+}
+let speakTimer = null;
+function say(text, opts = {}) {
+  if (voiceMode === 'muet') return;
+  clearTimeout(speakTimer);
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+
+  let delay = 0;
+  if (voiceMode === 'villageois') delay = villagerMumble(opts.grunts || 1 + Math.floor(Math.random() * 2)) * 1000 + 60;
+  else if (opts.ding !== false) { SFX.ding(); delay = 280; }
+
+  if (!text || !('speechSynthesis' in window)) return;
+  speakTimer = setTimeout(() => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'fr-FR';
+    if (voiceMode === 'villageois') { u.pitch = 0.45; u.rate = 0.92; }
+    const v = frenchVoice(); if (v) u.voice = v;
+    speechSynthesis.speak(u);
+  }, delay);
+}
+
+/* =====================================================================
+   7. INSTRUCTIONS EN FRANÇAIS
+   ===================================================================== */
+const ORD = ['', 'première', 'deuxième', 'troisième', 'quatrième', 'cinquième', 'sixième'];
+const DIR_TXT = {
+  'left': 'tournez à gauche', 'right': 'tournez à droite',
+  'slight left': 'serrez à gauche', 'slight right': 'serrez à droite',
+  'sharp left': 'tournez fort à gauche', 'sharp right': 'tournez fort à droite',
+  'straight': 'continuez tout droit', 'uturn': 'faites demi-tour'
+};
+function instruction(step) {
+  const m = step.maneuver, type = m.type, mod = m.modifier || 'straight';
+  const name = step.name ? step.name : (step.ref || '');
+  const sur = name ? ' sur ' + name : '';
+  const side = mod.includes('left') ? ' à gauche' : mod.includes('right') ? ' à droite' : '';
+  let text, arrow = mod;
+  switch (type) {
+    case 'arrive':
+      return { text: 'vous arrivez à destination', arrow: 'arrive' };
+    case 'roundabout': case 'rotary': case 'roundabout turn':
+      text = m.exit ? `au rond-point, prenez la ${ORD[m.exit] || m.exit + 'e'} sortie${sur}` : 'prenez le rond-point' + sur;
+      arrow = 'round'; break;
+    case 'exit roundabout': case 'exit rotary':
+      text = 'sortez du rond-point' + sur; break;
+    case 'merge':
+      text = 'insérez-vous' + side + sur; break;
+    case 'on ramp':
+      text = 'prenez la bretelle' + side + sur; break;
+    case 'off ramp':
+      text = 'prenez la sortie' + side + sur; break;
+    case 'fork':
+      text = 'à la fourche, restez' + (side || ' tout droit') + sur; break;
+    case 'continue': case 'new name':
+      text = (mod === 'straight' ? 'continuez' : DIR_TXT[mod]) + sur; break;
+    default:
+      text = (DIR_TXT[mod] || 'continuez') + sur;
+  }
+  return { text, arrow };
+}
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+/* =====================================================================
+   8. ITINÉRAIRE (OSRM)
+   ===================================================================== */
+async function getRoute(from, to, bearing) {
+  // On indique le sens de marche pour éviter un demi-tour inutile au départ
+  const bear = bearing != null ? `&bearings=${Math.round(bearing)},60;` : '';
+  const url = `https://router.project-osrm.org/route/v1/driving/${from[0].toFixed(6)},${from[1].toFixed(6)};${to[0].toFixed(6)},${to[1].toFixed(6)}` +
+              `?steps=true&geometries=geojson&overview=false${bear}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  let res;
+  try { res = await fetch(url, { signal: ctrl.signal }); }
+  catch (e) { throw new Error('Pas de réponse du serveur d\'itinéraire'); }
+  finally { clearTimeout(timer); }
+  if (!res.ok) throw new Error('Serveur d\'itinéraire indisponible');
+  const json = await res.json();
+  if (json.code !== 'Ok' || !json.routes || !json.routes.length) throw new Error('Aucun itinéraire trouvé');
+  const rt = json.routes[0];
+  const steps = rt.legs[0].steps;
+
+  const coords = [], stepStart = [];
+  steps.forEach(s => {
+    const g = s.geometry.coordinates;
+    if (!coords.length) { stepStart.push(0); coords.push(...g); }
+    else { stepStart.push(coords.length - 1); coords.push(...g.slice(1)); }
+  });
+  const cum = [0];
+  for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + distance(coords[i - 1], coords[i]));
+  return { coords, cum, steps, stepCum: stepStart.map(i => cum[i]), total: cum[cum.length - 1], duration: rt.duration };
+}
+
+let lastLineUpdate = 0;
+function showRouteLine(r, fromAlong = 0) {
+  const src = map.getSource('trajet');
+  if (!src) return;
+  if (!r) { src.setData({ type: 'FeatureCollection', features: [] }); return; }
+  // On efface la partie déjà parcourue
+  let coords = r.coords;
+  if (fromAlong > 0) {
+    const i = Math.max(0, r.cum.findIndex(v => v > fromAlong) - 1);
+    coords = [pointAt(fromAlong, r), ...r.coords.slice(i + 1)];
+  }
+  if (coords.length < 2) coords = r.coords.slice(-2);
+  src.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: coords } });
+}
+function showBeacon(d) {
+  const src = map.getSource('balise');
+  if (!src) return;
+  if (!d) { src.setData({ type: 'FeatureCollection', features: [] }); return; }
+  const dy = 2 / 110540, dx = 2 / (111320 * Math.cos(toRad(d.lat)));
+  src.setData({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[
+    [d.lon - dx, d.lat - dy], [d.lon + dx, d.lat - dy], [d.lon + dx, d.lat + dy], [d.lon - dx, d.lat + dy], [d.lon - dx, d.lat - dy]
+  ]] } });
+}
+
+let lastSeg = 0;
+function project(pos) {
+  const c = route.coords, n = c.length;
+  const kx = 111320 * Math.cos(toRad(pos[1])), ky = 110540;
+  const X = p => [(p[0] - pos[0]) * kx, (p[1] - pos[1]) * ky];
+  function scan(a, b) {
+    let best = { dist: Infinity, i: 0, t: 0 };
+    for (let i = a; i < b; i++) {
+      const A = X(c[i]), B = X(c[i + 1]);
+      const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+      let t = L2 ? -(A[0] * dx + A[1] * dy) / L2 : 0;
+      t = clamp(t, 0, 1);
+      const d = Math.hypot(A[0] + t * dx, A[1] + t * dy);
+      if (d < best.dist) best = { dist: d, i, t };
+    }
+    return best;
+  }
+  let b = scan(Math.max(0, lastSeg - 10), Math.min(n - 1, lastSeg + 300));
+  if (b.dist > 40) { const all = scan(0, n - 1); if (all.dist < b.dist) b = all; }
+  lastSeg = b.i;
+  const p1 = c[b.i], p2 = c[b.i + 1] || p1;
+  const segLen = route.cum[b.i + 1] - route.cum[b.i] || 0;
+  return {
+    dist: b.dist,
+    point: [p1[0] + (p2[0] - p1[0]) * b.t, p1[1] + (p2[1] - p1[1]) * b.t],
+    along: route.cum[b.i] + b.t * segLen,
+    bearing: segLen > 1 ? bearingBetween(p1, p2) : null
+  };
+}
+function pointAt(s, r = route) {
+  const cum = r.cum;
+  let lo = 0, hi = cum.length - 1;
+  while (lo < hi - 1) { const mid = (lo + hi) >> 1; if (cum[mid] <= s) lo = mid; else hi = mid; }
+  const seg = cum[hi] - cum[lo] || 1, t = clamp((s - cum[lo]) / seg, 0, 1);
+  const a = r.coords[lo], b = r.coords[hi];
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+/* =====================================================================
+   9. ANIMATION FLUIDE (flèche + caméra glissent entre deux points GPS)
+   ===================================================================== */
+const anim = { from: null, to: null, fromB: 0, toB: 0, t0: 0, dur: 1000, running: false, lastFix: 0 };
+let camZoom = 17.5;
+
+function animState(now) {
+  if (!anim.to) return null;
+  const t = clamp((now - anim.t0) / anim.dur, 0, 1);
+  const pos = [anim.from[0] + (anim.to[0] - anim.from[0]) * t, anim.from[1] + (anim.to[1] - anim.from[1]) * t];
+  const b = (anim.fromB + angleDiff(anim.fromB, anim.toB) * t + 360) % 360;
+  return { pos, b, t };
+}
+function setTarget(pos, bearing) {
+  const now = performance.now();
+  const cur = animState(now);
+  // Si le saut est énorme (recalcul, tunnel…), on se téléporte au lieu de glisser
+  const teleport = !cur || distance(cur.pos, pos) > 300;
+  anim.from = teleport ? pos : cur.pos;
+  anim.fromB = teleport ? bearing : cur.b;
+  anim.to = pos; anim.toB = bearing; anim.t0 = now;
+  anim.dur = clamp(anim.lastFix ? now - anim.lastFix : 1000, 350, 1600);
+  anim.lastFix = now;
+  if (!anim.running) { anim.running = true; requestAnimationFrame(tick); }
+}
+function targetZoom() {
+  const kmh = lastSpeed * 3.6;
+  return kmh > 90 ? 15.8 : kmh > 60 ? 16.5 : kmh > 35 ? 17 : 17.5;
+}
+function tick(now) {
+  const s = animState(now);
+  if (!s) { anim.running = false; return; }
+  player.setLngLat(s.pos).setRotation(s.b);
+  const navLike = mode === 'nav' || mode === 'arrived';
+  if (following && (navLike || mode === 'idle')) {
+    if (navLike) {
+      camZoom += (targetZoom() - camZoom) * 0.03;
+      map.jumpTo({ center: s.pos, bearing: s.b, zoom: camZoom });
+    } else {
+      map.jumpTo({ center: s.pos });
+    }
+  }
+  if (s.t < 1 || (navLike && Math.abs(targetZoom() - camZoom) > 0.02)) requestAnimationFrame(tick);
+  else anim.running = false;
+}
+
+/* =====================================================================
+   10. ÉTAT DE L'APPLI + INTERFACE
+   ===================================================================== */
+let mode = 'idle';            // idle | preview | nav | arrived
+let me = null, dest = null, route = null;
+let announced = {};
+let offCount = 0, lastReroute = 0, rerouting = false;
+let sim = null, simDist = 0;
+let following = true, heading = 0, lastPoint = null, firstFix = true, lastSpeed = 0, gpsAccuracy = 99;
+let curAlong = 0, overview = false;
+
+const wazeUrl = d => `https://waze.com/ul?ll=${d.lat.toFixed(6)},${d.lon.toFixed(6)}&navigate=yes`;
+const navPadding = () => ({ top: Math.round(window.innerHeight * 0.42), bottom: 0, left: 0, right: 0 });
+const NO_PAD = { top: 0, bottom: 0, left: 0, right: 0 };
+
+function setMode(m) {
+  mode = m;
+  document.body.classList.toggle('nav-mode', m === 'nav' || m === 'arrived');
+  document.body.classList.toggle('preview-mode', m === 'preview');
+  renderHotbar();
+}
+
+/* --- Barre d'inventaire (change selon le mode) --- */
+function slot(def) {
+  const el = document.createElement(def.href ? 'a' : 'button');
+  el.className = 'slot' + (def.sel ? ' sel' : '');
+  el.setAttribute('aria-label', def.label);
+  el.innerHTML = `<div class="ic">${icon(def.icon)}</div><div class="lb"></div>`;
+  el.querySelector('.lb').textContent = def.label;
+  if (def.href) { el.href = def.href; el.target = '_blank'; el.rel = 'noopener'; }
+  el.addEventListener('click', e => { SFX.click(); if (def.onClick) def.onClick(e); });
+  return el;
+}
+const voiceSlot = () => {
+  const v = VOICES.find(x => x.id === voiceMode) || VOICES[0];
+  return { icon: v.icon, label: v.label, onClick: cycleVoice };
+};
+const skySlot = () => ({
+  icon: isNight() ? 'lune' : 'soleil',
+  label: skyMode === 'auto' ? 'Auto' : skyMode === 'jour' ? 'Jour' : 'Nuit',
+  onClick: () => {
+    skyMode = { auto: 'jour', jour: 'nuit', nuit: 'auto' }[skyMode];
+    STORE.set('ciel', skyMode); applyDayNight(); renderHotbar();
+    toast('Ciel : ' + (skyMode === 'auto' ? 'automatique' : skyMode));
+  }
+});
+const centerSlot = () => ({ icon: 'centrer', label: 'Centrer', sel: !following, onClick: recenter });
+
+function renderHotbar() {
+  const hb = $('hotbar'); hb.innerHTML = '';
+  let slots = [];
+  if (mode === 'idle') slots = [voiceSlot(), centerSlot(), skySlot()];
+  else if (mode === 'preview') slots = [];
+  else if (mode === 'nav') slots = [
+    voiceSlot(), centerSlot(),
+    { icon: 'carte', label: 'Aperçu', sel: overview, onClick: showOverview },
+    { icon: 'waze', label: 'Waze', href: wazeUrl(dest) },
+    { icon: 'stop', label: 'Arrêter', onClick: goIdle }
+  ];
+  else if (mode === 'arrived') slots = [voiceSlot(), { icon: 'drapeau', label: 'Terminer', onClick: goIdle }];
+  slots.forEach(s => hb.appendChild(slot(s)));
+  hb.classList.toggle('hidden', !slots.length);
+}
+
+function cycleVoice() {
+  const i = VOICES.findIndex(v => v.id === voiceMode);
+  voiceMode = VOICES[(i + 1) % VOICES.length].id;
+  STORE.set('voix', voiceMode);
+  renderHotbar();
+  if (voiceMode === 'villageois') say('Hmm. Voix du villageois.', { grunts: 2 });
+  else if (voiceMode === 'normale') say('Voix normale.');
+  else if ('speechSynthesis' in window) speechSynthesis.cancel();
+}
+
+/* --- Carte d'aperçu --- */
+function setCard(line1, line2, buttons) {
+  const info = $('cInfo'); info.innerHTML = '';
+  const a = document.createElement('div'); a.textContent = line1;
+  const b = document.createElement('div'); b.className = 'sub'; b.textContent = line2;
+  info.append(a, b);
+  const row = $('cBtns'); row.innerHTML = '';
+  buttons.forEach(bt => {
+    const el = document.createElement(bt.href ? 'a' : 'button');
+    el.className = 'btn ' + (bt.cls || '');
+    el.textContent = bt.label;
+    if (bt.href) { el.href = bt.href; el.target = '_blank'; el.rel = 'noopener'; }
+    el.addEventListener('click', e => { SFX.click(); if (bt.onClick) bt.onClick(e, el); });
+    row.appendChild(el);
+  });
+}
+
+/* --- Favoris et récents --- */
+const samePlace = (a, b) => Math.abs(a.lat - b.lat) < 1e-5 && Math.abs(a.lon - b.lon) < 1e-5;
+const isFav = p => STORE.get('favoris', []).some(f => samePlace(f, p));
+function toggleFav(p) {
+  let favs = STORE.get('favoris', []);
+  if (favs.some(f => samePlace(f, p))) { favs = favs.filter(f => !samePlace(f, p)); toast('Retiré des favoris'); }
+  else { favs.unshift({ lon: p.lon, lat: p.lat, label: p.label, sub: p.sub || '' }); toast('Ajouté aux favoris ★'); }
+  STORE.set('favoris', favs.slice(0, 8));
+}
+function addRecent(p) {
+  const list = STORE.get('recents', []).filter(r => !samePlace(r, p));
+  list.unshift({ lon: p.lon, lat: p.lat, label: p.label, sub: p.sub || '' });
+  STORE.set('recents', list.slice(0, 5));
+}
+
+/* --- Accueil --- */
+function goIdle() {
+  stopSim();
+  route = null; dest = null; overview = false;
+  setMode('idle');
+  showRouteLine(null); showBeacon(null); flag.remove();
+  $('top').classList.remove('hidden');
+  $('instr').classList.add('hidden');
+  $('card').classList.add('hidden');
+  $('street').textContent = ''; $('trip').textContent = '';
+  $('q').value = ''; $('clearQ').classList.add('hidden'); renderHome();
+  following = true; renderHotbar();
+  if (lastPoint) map.easeTo({ center: player.getLngLat(), zoom: 16, pitch: 58, padding: NO_PAD, duration: 700 });
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+}
+
+/* --- Aperçu --- */
+async function chooseDest(place) {
+  if (!me) { toast('Attends le signal GPS avant de lancer un trajet.'); return; }
+  dest = place;
+  $('results').innerHTML = '';
+  $('q').blur();
+  addRecent(place);
+  toast('Calcul de l\'itinéraire…', 3000);
+  try {
+    route = await getRoute(me, [place.lon, place.lat], lastSpeed > 2 ? heading : null);
+  } catch (e) {
+    toast(e.message || 'Impossible de calculer le trajet.');
+    return;
+  }
+  setMode('preview');
+  showRouteLine(route);
+  showBeacon(place);
+  flag.setLngLat([place.lon, place.lat]).addTo(map);
+
+  $('top').classList.add('hidden');
+  $('card').classList.remove('hidden');
+  const favLabel = () => isFav(place) ? '★' : '☆';
+  setCard(place.label,
+    `${fmtDur(route.duration)} · ${fmtDist(route.total)} · arrivée ${clock(new Date(Date.now() + route.duration * 1000))}`,
+    [
+      { label: 'Démarrer', cls: 'green', onClick: () => startNav(false) },
+      { label: 'Simuler', onClick: () => startNav(true) },
+      { label: 'Waze', cls: 'blue', href: wazeUrl(place) },
+      { label: favLabel(), onClick: (e, el) => { toggleFav(place); el.textContent = favLabel(); el.classList.toggle('on', isFav(place)); } },
+      { label: '✕', cls: 'red', onClick: goIdle }
+    ]);
+  const favBtn = $('cBtns').children[3]; favBtn.classList.toggle('on', isFav(place));
+
+  following = false;
+  fitRoute(route.coords, { top: 60, bottom: 220, left: 40, right: 40 });
+}
+function fitRoute(coords, padding) {
+  const b = new maplibregl.LngLatBounds();
+  coords.forEach(c => b.extend(c));
+  map.jumpTo({ pitch: 0, bearing: 0 });
+  map.fitBounds(b, { padding, duration: 800, maxZoom: 17 });
+}
+
+/* --- Navigation --- */
+function startNav(simulate) {
+  setMode('nav');
+  announced = {}; lastSeg = 0; offCount = 0; curAlong = 0; overview = false;
+  following = true;
+  $('card').classList.add('hidden');
+  $('instr').classList.remove('hidden');
+  renderHotbar();
+  keepAwake();
+  audioCtx();
+
+  const first = route.steps[1] ? instruction(route.steps[1]) : null;
+  say('C\'est parti.' + (first ? ' Ensuite, ' + first.text + '.' : ''), { grunts: 2 });
+
+  camZoom = 17.5;
+  map.easeTo({ zoom: camZoom, pitch: 62, padding: navPadding(), duration: 800 });
+
+  if (simulate) startSim();
+  else if (me) handleFix({ pos: me, speed: lastSpeed, heading: null, accuracy: gpsAccuracy });
+}
+
+let shownArrow = '', shownThen = '';
+function updateGuidance(along) {
+  curAlong = along;
+  const remaining = Math.max(0, route.total - along);
+  if (remaining < 25) { arrive(); return; }
+
+  let k = route.stepCum.findIndex((v, i) => i >= 1 && v > along + 3);
+  if (k < 0) k = route.steps.length - 1;
+  const toNext = route.stepCum[k] - along;
+  const ins = instruction(route.steps[k]);
+
+  if (shownArrow !== ins.arrow) { $('iArrow').innerHTML = arrowSvg(ins.arrow); shownArrow = ins.arrow; }
+  $('iDist').textContent = fmtDist(toNext);
+  $('iTxt').textContent = cap(ins.text);
+
+  // "Puis…" si la manœuvre suivante arrive juste après
+  const next2 = route.steps[k + 1];
+  const gap = next2 ? route.stepCum[k + 1] - route.stepCum[k] : Infinity;
+  const thenArrow = gap < 150 ? instruction(next2).arrow : '';
+  if (thenArrow !== shownThen) {
+    shownThen = thenArrow;
+    $('iThen').classList.toggle('hidden', !thenArrow);
+    if (thenArrow) $('iThen').querySelector('.a').innerHTML = arrowSvg(thenArrow);
+  }
+
+  // HUD : rue actuelle, infos, barre d'XP
+  const curStep = route.steps[Math.max(0, k - 1)];
+  $('street').textContent = curStep.name || curStep.ref || '';
+  const remSec = route.duration * (remaining / route.total);
+  const speedTxt = lastSpeed > 0.5 ? ` · ${Math.round(lastSpeed * 3.6)} km/h` : '';
+  $('trip').textContent = `Arrivée ${clock(new Date(Date.now() + remSec * 1000))} · ${fmtDist(remaining)}${speedTxt}`;
+  const mins = Math.max(1, Math.round(remSec / 60));
+  $('xpLevel').innerHTML = `${mins}<small> min</small>`;
+  $('xpFill').style.width = (100 * clamp(along / route.total, 0, 1)).toFixed(1) + '%';
+
+  // On raccourcit le trait rouge derrière nous (au plus 1 fois toutes les 3 s)
+  const now = Date.now();
+  if (now - lastLineUpdate > 3000) { lastLineUpdate = now; showRouteLine(route, along); }
+
+  // Annonces : loin, proche, maintenant
+  const far = lastSpeed > 15 ? 700 : 350;
+  const a = announced[k] || (announced[k] = {});
+  const thenTxt = (thenArrow && next2) ? `, puis ${instruction(next2).text}` : '';
+  if (toNext <= 30) {
+    if (!a.now) { a.now = a.near = a.far = true; say(cap(ins.text) + thenTxt + '.'); vibrate(); }
+  } else if (toNext <= 150) {
+    if (!a.near) { a.near = a.far = true; say(`Dans ${fmtDistVoice(toNext)}, ${ins.text}${thenTxt}.`); }
+  } else if (toNext <= far) {
+    if (!a.far) { a.far = true; say(`Dans ${fmtDistVoice(toNext)}, ${ins.text}.`); }
+  }
+}
+function vibrate() { try { if (navigator.vibrate) navigator.vibrate([60, 40, 60]); } catch (e) {} }
+
+function arrive() {
+  if (mode !== 'nav') return;
+  setMode('arrived');
+  stopSim();
+  SFX.arrive();
+  setTimeout(() => say('Vous êtes arrivé. Bien joué !', { grunts: 2, ding: false }), 650);
+  $('iArrow').innerHTML = arrowSvg('arrive'); shownArrow = 'arrive';
+  $('iDist').textContent = 'Arrivé !';
+  $('iTxt').textContent = dest ? dest.label : '';
+  $('iThen').classList.add('hidden'); shownThen = '';
+  $('xpFill').style.width = '100%';
+  $('xpLevel').innerHTML = '✓';
+  $('trip').textContent = 'Destination atteinte';
+  showRouteLine(null);
+  toast('Succès débloqué : Arrivé à bon port !', 6000);
+}
+
+async function reroute(pos) {
+  if (rerouting || Date.now() - lastReroute < 10000) return;
+  rerouting = true; lastReroute = Date.now(); offCount = 0;
+  say('Recalcul de l\'itinéraire.', { grunts: 1 });
+  toast('Recalcul de l\'itinéraire…');
+  try {
+    route = await getRoute(pos, [dest.lon, dest.lat], heading);
+    lastSeg = 0; announced = {}; lastLineUpdate = 0;
+    showRouteLine(route);
+  } catch (e) {
+    toast('Recalcul impossible pour l\'instant.');
+  }
+  rerouting = false;
+}
+
+function showOverview() {
+  if (!route) return;
+  overview = !overview;
+  if (overview) {
+    following = false;
+    const rest = route.coords.slice(Math.max(0, lastSeg));
+    map.easeTo({ padding: NO_PAD, duration: 0 });
+    fitRoute(rest.length > 1 ? rest : route.coords, { top: 140, bottom: 190, left: 40, right: 40 });
+  } else recenter();
+  renderHotbar();
+}
+function recenter() {
+  following = true; overview = false;
+  const target = player.getLngLat();
+  if (mode === 'nav' || mode === 'arrived') map.easeTo({ center: target, zoom: camZoom, pitch: 62, bearing: anim.toB, padding: navPadding(), duration: 600 });
+  else map.easeTo({ center: target, zoom: 16, pitch: 58, padding: NO_PAD, duration: 600 });
+  renderHotbar();
+}
+
+/* --- Simulation --- */
+function startSim() {
+  stopSim();
+  simDist = 0;
+  const speed = 14;
+  sim = setInterval(() => {
+    if (!route) return;
+    simDist = Math.min(route.total, simDist + speed);
+    handleFix({ pos: pointAt(simDist), speed, heading: null, accuracy: 5 });
+  }, 1000);
+  toast('Simulation à 50 km/h');
+}
+function stopSim() { if (sim) { clearInterval(sim); sim = null; } }
+
+/* =====================================================================
+   11. GPS
+   ===================================================================== */
+function handleFix(f) {
+  const cur = f.pos;
+  lastSpeed = f.speed || 0;
+  gpsAccuracy = f.accuracy || 99;
+
+  if (f.heading != null && !isNaN(f.heading) && lastSpeed > 1) heading = f.heading;
+  else if (lastPoint && distance(lastPoint, cur) > 6) heading = bearingBetween(lastPoint, cur);
+  if (!lastPoint || distance(lastPoint, cur) > 6) lastPoint = cur;
+
+  let shown = cur, camBearing = heading;
+
+  if (mode === 'nav' && route) {
+    const pr = project(cur);
+    if (pr.dist < 30) {
+      shown = pr.point;
+      if (pr.bearing != null) camBearing = pr.bearing;
+      offCount = 0;
+    } else if (pr.dist > 45 && gpsAccuracy < 50) {
+      offCount++;
+      if (offCount >= 3) reroute(cur);
+    }
+    updateGuidance(pr.along);
+  }
+
+  if (!playerShown) { player.setLngLat(shown).addTo(map); playerShown = true; }
+  if (firstFix) {
+    map.jumpTo({ center: shown, zoom: 16, pitch: 58, bearing: 0 });
+    firstFix = false;
+  }
+  setTarget(shown, camBearing);
+}
+
+if ('geolocation' in navigator) {
+  navigator.geolocation.watchPosition(p => {
+    me = [p.coords.longitude, p.coords.latitude];
+    if (sim) return;
+    handleFix({ pos: me, speed: p.coords.speed, heading: p.coords.heading, accuracy: p.coords.accuracy });
+  }, err => {
+    toast(err.code === 1 ? 'GPS refusé : autorise la localisation pour ce site.' : 'Signal GPS introuvable…');
+  }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+} else {
+  toast('Ce navigateur ne gère pas le GPS.');
+}
+
+map.on('dragstart', () => { if (following) { following = false; renderHotbar(); } });
+
+/* =====================================================================
+   12. RECHERCHE (Photon) + FAVORIS + RÉCENTS
+   ===================================================================== */
+function renderList(groups) {
+  const ul = $('results'); ul.innerHTML = '';
+  groups.forEach(g => {
+    if (!g.items.length) return;
+    if (g.title) { const h = document.createElement('li'); h.className = 'head'; h.textContent = g.title; ul.appendChild(h); }
+    g.items.forEach(p => {
+      const li = document.createElement('li');
+      const ic = document.createElement('div'); ic.className = 'ic'; ic.innerHTML = icon(g.icon || 'loupe');
+      const txt = document.createElement('div');
+      const a = document.createElement('div'); a.textContent = p.label;
+      const b = document.createElement('div'); b.className = 'sub'; b.textContent = p.sub || '';
+      txt.append(a, b); li.append(ic, txt);
+      if (!p.none) li.addEventListener('click', () => { SFX.click(); chooseDest(p); });
+      ul.appendChild(li);
+    });
+  });
+}
+function renderHome() {
+  renderList([
+    { title: 'Favoris', icon: 'etoile', items: STORE.get('favoris', []) },
+    { title: 'Récents', icon: 'horloge', items: STORE.get('recents', []).filter(r => !isFav(r)) }
+  ]);
+}
+function photonToPlace(f) {
+  const p = f.properties, [lon, lat] = f.geometry.coordinates;
+  const street = [p.housenumber, p.street].filter(Boolean).join(' ');
+  const label = p.name || street || p.city || 'Lieu';
+  const sub = [p.name && street ? street : '', [p.postcode, p.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return { lon, lat, label, sub };
+}
+
+let searchTimer, searchId = 0;
+$('q').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const q = $('q').value.trim();
+  $('clearQ').classList.toggle('hidden', !$('q').value);
+  if (q.length < 3) { renderHome(); return; }
+  searchTimer = setTimeout(async () => {
+    const id = ++searchId;
+    let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=fr&limit=6`;
+    if (me) url += `&lat=${me[1].toFixed(4)}&lon=${me[0].toFixed(4)}`;
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (id !== searchId) return;
+      const items = (json.features || []).map(photonToPlace);
+      if (!items.length) renderList([{ items: [{ label: 'Aucun résultat', sub: 'Essaie avec la ville en plus', none: true }] }]);
+      else renderList([{ icon: 'loupe', items }]);
+    } catch (e) {
+      toast('Recherche impossible (pas de réseau ?)');
+    }
+  }, 350);
+});
+$('q').addEventListener('focus', () => { if ($('q').value.trim().length < 3) renderHome(); });
+$('q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { const first = $('results').querySelector('li:not(.head)'); if (first) first.click(); }
+});
+$('clearQ').addEventListener('click', () => { $('q').value = ''; $('clearQ').classList.add('hidden'); renderHome(); $('q').focus(); });
+
+/* =====================================================================
+   13. DÉMARRAGE, ÉCRAN ALLUMÉ, INSTALLATION
+   ===================================================================== */
+setMode('idle');
+renderHome();
+
+let wakeLock = null;
+async function keepAwake() {
+  try {
+    if ('wakeLock' in navigator && document.visibilityState === 'visible' && !wakeLock) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (e) { /* pas grave */ }
+}
+document.addEventListener('visibilitychange', keepAwake);
+document.addEventListener('click', keepAwake, { once: true });
+keepAwake();
+
+// La voix française se charge parfois en retard sur Android
+if ('speechSynthesis' in window) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); }
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

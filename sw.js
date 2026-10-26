@@ -1,5 +1,5 @@
 // BlocRoute — service worker : garde l'appli en cache, laisse passer la carte et les itinéraires
-const CACHE = 'blocroute-v3';
+const CACHE = 'blocroute-v4';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
